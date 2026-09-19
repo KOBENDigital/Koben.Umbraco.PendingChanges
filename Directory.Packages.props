@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      The Umbraco version everything in this solution compiles against, and the floor of the nupkg's
+      dependency range. 18.0.0 rather than the 17 LTS: Umbraco 18 moved IContent.Published and
+      IContent.PublishedVersionId down to IPublishableContentBase, and this package is built on both.
+      Source compiles against either major; the compiled binary does not (see README, "Umbraco
+      versions"). CI builds the supported 18.x line:
+        dotnet build -p:UmbracoVersion=18.1.1
+      Release builds must use the default.
+    -->
+    <UmbracoVersion Condition="'$(UmbracoVersion)' == ''">18.0.0</UmbracoVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersion)" />
+  </ItemGroup>
+</Project>

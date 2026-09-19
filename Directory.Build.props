@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!--
+      Audit only the packages this solution references directly. Advisories against Umbraco's own
+      transitive graph belong to the consuming site, which floats Umbraco above our floor; pinning
+      them here would both break restore on newer Umbraco versions and leak the pins into the
+      nupkg as dependencies.
+    -->
+    <NuGetAuditMode>direct</NuGetAuditMode>
+  </PropertyGroup>
+</Project>

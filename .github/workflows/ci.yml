@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Umbraco ${{ matrix.umbraco }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor (what the nupkg is built against) and the latest 18. Bump the second as Umbraco
+        # releases; the first only with a deliberate floor change (see README, "Umbraco versions").
+        umbraco: ["18.0.0", "18.1.1"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build -c Release -p:UmbracoVersion=${{ matrix.umbraco }}
+
+      - name: Pack (floor only)
+        if: matrix.umbraco == '18.0.0'
+        run: dotnet pack src/Koben.Umbraco.PendingChanges -c Release -o artifacts --no-build
+
+      - name: Upload nupkg
+        if: matrix.umbraco == '18.0.0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/*.nupkg

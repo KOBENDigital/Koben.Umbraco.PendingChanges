@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <StaticWebAssetBasePath>App_Plugins/Koben.PendingChanges</StaticWebAssetBasePath>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Koben.Umbraco.PendingChanges</PackageId>
+    <Title>Koben Pending Changes for Umbraco</Title>
+    <Description>Shows Umbraco editors which of a page's fields are saved but not published yet, who last changed each one and when, without leaving the content editor.</Description>
+    <Authors>Koben Digital</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>umbraco;umbraco-marketplace;backoffice;publishing;editor-tools</PackageTags>
+    <PackageProjectUrl>https://github.com/KOBENDigital/Koben.Umbraco.PendingChanges</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/KOBENDigital/Koben.Umbraco.PendingChanges</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Umbraco.Cms.Web.Common" />
+    <PackageReference Include="Umbraco.Cms.Api.Management" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The package README is consumer-facing; the repository README at the root is for contributors. -->
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
