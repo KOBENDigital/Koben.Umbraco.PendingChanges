@@ -162,12 +162,12 @@ if (!customElements.get(FLAG_ELEMENT)) {
 /**
  * The mark on a block's card: an amber outline over the block, and a tag naming what is waiting to
  * be published inside it. It sits inside the card's own shadow root because a block card has no
- * slot of its own to render into, and it is removed again with the rest of the decoration.
+ * slot of its own to render into, it never takes a click, and it is removed again with the rest of
+ * the decoration.
  */
 export class KobenPendingBlockMarkElement extends UmbLitElement {
   static properties = {
-    label: { type: String, attribute: false },
-    detail: { type: String, attribute: false }
+    label: { type: String, attribute: false }
   };
 
   static styles = css`
@@ -181,18 +181,33 @@ export class KobenPendingBlockMarkElement extends UmbLitElement {
       border-radius: var(--uui-border-radius, 3px);
     }
 
+    /*
+     * A block's own actions sit in the same corner — on a one-line card, in the same place — and
+     * they must win. Every block editor's card publishes the opacity it is fading those actions
+     * to, so the tag takes the opposite of it: it is there while the card is at rest and gone the
+     * moment the actions appear. What it said is on the card's own tooltip by then.
+     */
     uui-tag {
       position: absolute;
       right: var(--uui-size-space-2, 6px);
       bottom: var(--uui-size-space-2, 6px);
-      pointer-events: auto;
       --uui-tag-font-size: 10px;
+      transition: opacity 120ms;
+      opacity: calc(
+        1 -
+          max(
+            var(--umb-block-list-entry-actions-opacity, 0),
+            var(--umb-block-grid-entry-actions-opacity, 0),
+            var(--umb-block-single-entry-actions-opacity, 0),
+            var(--umb-block-entry-actions-opacity, 0)
+          )
+      );
     }
   `;
 
   render() {
     return html`
-      <uui-tag look="secondary" color="warning" title=${this.detail ?? ""}>
+      <uui-tag look="secondary" color="warning">
         <uui-icon name="icon-edit"></uui-icon>
         ${this.label}
       </uui-tag>
@@ -602,8 +617,14 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
 
     const summary = describeBlocks(blocks);
     mark.label = summary.label;
-    mark.detail = summary.detail;
     entry.__kobenMark = mark;
+
+    // The tag steps aside for the card's own actions, so what it said has to be somewhere that
+    // survives a hover. A card Umbraco has already given a tooltip keeps it.
+    if (!entry.hasAttribute("title") || entry.__kobenTitle) {
+      entry.setAttribute("title", summary.detail);
+      entry.__kobenTitle = true;
+    }
   }
 
   /**
@@ -613,6 +634,11 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
   #clearEntry(entry) {
     if (entry.hasAttribute(BLOCK_MARKER_ATTRIBUTE)) {
       entry.removeAttribute(BLOCK_MARKER_ATTRIBUTE);
+    }
+
+    if (entry.__kobenTitle) {
+      entry.removeAttribute("title");
+      entry.__kobenTitle = undefined;
     }
 
     entry.__kobenMark?.remove();

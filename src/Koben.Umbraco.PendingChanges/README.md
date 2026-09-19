@@ -25,6 +25,10 @@ a tag saying which it is:
 >
 > ✎ **Edited** — the block is live, but not as it now stands
 
+The tag steps aside the moment you reach for the block: a card's own buttons appear in the same
+corner, so the tag fades out as they fade in, and the card's tooltip says the same thing while they
+are showing. The outline stays either way.
+
 Open that block and only the properties that actually differ carry the usual **Not published** tag —
 its settings as well as its content. Blocks nested inside blocks are flagged the same way, at every
 depth, so an edit buried three levels down leaves a trail of marks from the page to the field.
