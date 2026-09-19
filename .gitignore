@@ -3,7 +3,10 @@ bin/
 obj/
 *.user
 *.suo
-artifacts/
+# The local package source in nuget.config points here, and NuGet fails the restore if the folder
+# is missing — so the folder is tracked and its contents are not.
+artifacts/*
+!artifacts/.gitkeep
 
 # Umbraco test site runtime state
 test/TestSite/umbraco/Data/
