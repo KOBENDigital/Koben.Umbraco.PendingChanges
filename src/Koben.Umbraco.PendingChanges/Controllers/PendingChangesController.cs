@@ -66,7 +66,35 @@ public sealed class PendingChangesController : ManagementApiControllerBase
             Segment = change.Segment,
             Tab = change.Tab,
             ChangedBy = change.ChangedBy,
-            ChangedAt = change.ChangedAt
+            ChangedAt = change.ChangedAt,
+            Blocks = [.. change.Blocks.Select(Map)]
+        })]
+    };
+
+    /// <summary>
+    /// Shapes one block's difference for the backoffice, which needs to know which block to mark
+    /// and which of its properties to flag once it is opened.
+    /// </summary>
+    /// <param name="change">The block that changed.</param>
+    /// <returns>The response the backoffice extension consumes.</returns>
+    private static PendingBlockChangeResponseModel Map(PendingBlockChange change) => new()
+    {
+        Key = change.Key,
+        OwnerKey = change.OwnerKey,
+        Scope = change.Scope,
+        Status = change.Status,
+        ContentTypeKey = change.ContentTypeKey,
+        ContentTypeName = change.ContentTypeName,
+        ChangedBy = change.ChangedBy,
+        ChangedAt = change.ChangedAt,
+        Properties = [.. change.Properties.Select(property => new PendingBlockPropertyChangeResponseModel
+        {
+            Alias = property.Alias,
+            Culture = property.Culture,
+            Segment = property.Segment,
+            Tab = property.Tab,
+            ChangedBy = property.ChangedBy,
+            ChangedAt = property.ChangedAt
         })]
     };
 }

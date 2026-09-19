@@ -2,7 +2,7 @@
   "$schema": "../../umbraco-package-schema.json",
   "name": "Koben.PendingChanges",
   "id": "Koben.PendingChanges",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "allowTelemetry": false,
   "extensions": [
     {
@@ -14,6 +14,18 @@
         {
           "alias": "Umb.Condition.WorkspaceAlias",
           "match": "Umb.Workspace.Document"
+        }
+      ]
+    },
+    {
+      "type": "workspaceContext",
+      "alias": "Koben.PendingChanges.BlockWorkspaceContext",
+      "name": "Pending Changes Block Workspace Context",
+      "api": "/App_Plugins/Koben.PendingChanges/pending-changes.js",
+      "conditions": [
+        {
+          "alias": "Umb.Condition.WorkspaceAlias",
+          "match": "Umb.Workspace.Block"
         }
       ]
     }

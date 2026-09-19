@@ -1,9 +1,9 @@
 namespace Koben.Umbraco.PendingChanges.Controllers.Contracts;
 
-/// <summary>A single saved value that has not been published, and the edit behind it.</summary>
-public sealed class PendingPropertyChangeResponseModel
+/// <summary>A single property of a block whose saved value has not been published.</summary>
+public sealed class PendingBlockPropertyChangeResponseModel
 {
-    /// <summary>The property type alias.</summary>
+    /// <summary>The element type's property alias.</summary>
     public required string Alias { get; init; }
 
     /// <summary>The culture of the value, or null for an invariant property.</summary>
@@ -12,7 +12,7 @@ public sealed class PendingPropertyChangeResponseModel
     /// <summary>The segment of the value, or null for an unsegmented property.</summary>
     public string? Segment { get; init; }
 
-    /// <summary>The tab the property is edited on, or null when it sits outside one.</summary>
+    /// <summary>The tab of the block's editor the property sits on, or null when it sits outside one.</summary>
     public string? Tab { get; init; }
 
     /// <summary>The name of the user whose save introduced the current value.</summary>
@@ -20,11 +20,4 @@ public sealed class PendingPropertyChangeResponseModel
 
     /// <summary>When that save happened.</summary>
     public required DateTimeOffset ChangedAt { get; init; }
-
-    /// <summary>
-    /// The blocks inside this property's value that publishing would add, change or take away,
-    /// most recently changed first. Empty for a property that holds no blocks.
-    /// </summary>
-    public IReadOnlyCollection<PendingBlockChangeResponseModel> Blocks { get; init; } =
-        Array.Empty<PendingBlockChangeResponseModel>();
 }
