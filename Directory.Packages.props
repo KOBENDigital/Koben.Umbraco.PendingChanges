@@ -1,19 +1,34 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageFloatingVersionsEnabled>true</CentralPackageFloatingVersionsEnabled>
     <!--
       The Umbraco version everything in this solution compiles against, and the floor of the nupkg's
-      dependency range. 18.0.0 rather than the 17 LTS: Umbraco 18 moved IContent.Published and
+      dependency range. 18.0.2 rather than the 17 LTS: Umbraco 18 moved IContent.Published and
       IContent.PublishedVersionId down to IPublishableContentBase, and this package is built on both.
       Source compiles against either major; the compiled binary does not (see README, "Umbraco
       versions"). CI builds the supported 18.x line:
         dotnet build -p:UmbracoVersion=18.1.1
-      Release builds must use the default.
+      Release builds must use the default. The floor is .2 rather than .0 because 18.0.0 and 18.0.1
+      carry GHSA-wr57-hqmp-fgvh (Delivery API leaks Public Access content); a lower floor would let
+      a consuming site resolve a vulnerable Umbraco.
     -->
-    <UmbracoVersion Condition="'$(UmbracoVersion)' == ''">18.0.0</UmbracoVersion>
+    <UmbracoVersion Condition="'$(UmbracoVersion)' == ''">18.0.2</UmbracoVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Keep in sync with UmbracoAppLocalIcuVersion in test/TestSite/TestSite.csproj. -->
+    <UmbracoAppLocalIcuVersion Condition="'$(UmbracoAppLocalIcuVersion)' == ''">72.1.0.3</UmbracoAppLocalIcuVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="Umbraco.Cms.Web.Common" Version="$(UmbracoVersion)" />
     <PackageVersion Include="Umbraco.Cms.Api.Management" Version="$(UmbracoVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The test site: a real Umbraco install, used to prove the packed nupkg works. -->
+    <PackageVersion Include="Umbraco.Cms" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Umbraco.Cms.DevelopmentMode.Backoffice" Version="$(UmbracoVersion)" />
+    <PackageVersion Include="Microsoft.ICU.ICU4C.Runtime" Version="$(UmbracoAppLocalIcuVersion)" />
+    <!-- Whatever was last packed into artifacts/, prereleases included. -->
+    <PackageVersion Include="Koben.Umbraco.PendingChanges" Version="*-*" />
   </ItemGroup>
 </Project>

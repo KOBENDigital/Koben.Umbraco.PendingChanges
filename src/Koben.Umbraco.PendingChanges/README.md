@@ -24,7 +24,8 @@ section; nothing else is configurable.
 
 ## Requirements
 
-Umbraco **18.0.0** or newer, .NET 10.
+Umbraco **18.0.2** or newer, .NET 10. (18.0.0 and 18.0.1 are excluded by
+[GHSA-wr57-hqmp-fgvh](https://github.com/advisories/GHSA-wr57-hqmp-fgvh).)
 
 ## How it decides
 

@@ -14,22 +14,52 @@ jobs:
       matrix:
         # The floor (what the nupkg is built against) and the latest 18. Bump the second as Umbraco
         # releases; the first only with a deliberate floor change (see README, "Umbraco versions").
-        umbraco: ["18.0.0", "18.1.1"]
+        umbraco: ["18.0.2", "18.1.1"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
-      - name: Build
-        run: dotnet build -c Release -p:UmbracoVersion=${{ matrix.umbraco }}
+      # The test site installs the package from artifacts/, so pack before restoring it.
+      - name: Build and pack the package
+        run: |
+          dotnet build src/Koben.Umbraco.PendingChanges -c Release -p:UmbracoVersion=${{ matrix.umbraco }}
+          dotnet pack src/Koben.Umbraco.PendingChanges -c Release -o artifacts --no-build
 
-      - name: Pack (floor only)
-        if: matrix.umbraco == '18.0.0'
-        run: dotnet pack src/Koben.Umbraco.PendingChanges -c Release -o artifacts --no-build
+      - name: Build the test site against the packed nupkg
+        run: dotnet build test/TestSite -c Release -p:UmbracoVersion=${{ matrix.umbraco }}
+
+      # Proves what a consuming site actually gets: the static web assets served under
+      # /App_Plugins/, and the composer and controller found by Umbraco's own scanning. A
+      # registered but protected endpoint answers 401; an unregistered one answers 404.
+      - name: Boot the test site and check the package is live
+        run: |
+          set -euo pipefail
+          dotnet run --project test/TestSite -c Release --no-build --urls http://localhost:5055 &
+          SITE=$!
+          trap 'kill $SITE 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 60); do
+            if curl -sf -o /dev/null "http://localhost:5055/App_Plugins/Koben.PendingChanges/umbraco-package.json"; then
+              break
+            fi
+            if ! kill -0 $SITE 2>/dev/null; then echo "::error::the test site exited during boot"; exit 1; fi
+            sleep 5
+          done
+
+          check() {
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:5055$1")
+            echo "$1 -> $code (want $2)"
+            [ "$code" = "$2" ]
+          }
+          check /App_Plugins/Koben.PendingChanges/umbraco-package.json 200
+          check /App_Plugins/Koben.PendingChanges/pending-changes.js 200
+          check /umbraco/management/api/v1/pending-changes/document/34dc9a25-77a2-48f4-a386-2101da4e6eb4 401
+          check /umbraco/management/api/v1/not-a-real-koben-route/document/34dc9a25-77a2-48f4-a386-2101da4e6eb4 404
 
       - name: Upload nupkg
-        if: matrix.umbraco == '18.0.0'
+        if: matrix.umbraco == '18.0.2'
         uses: actions/upload-artifact@v4
         with:
           name: nupkg

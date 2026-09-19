@@ -37,7 +37,7 @@ the version must be bumped whenever the script changes. See the README section f
 
 ## Umbraco version floor
 
-18.0.0. See the README before lowering it — `IContent.Published` and `IContent.PublishedVersionId`
+18.0.2. See the README before lowering it — `IContent.Published` and `IContent.PublishedVersionId`
 moved interfaces in 18 and the break is at runtime, not compile time.
 
 ## Verification

@@ -1,0 +1,94 @@
+name: Release
+
+# Publishes to nuget.org via Trusted Publishing (OIDC): no long-lived API key is stored anywhere.
+# One-time setup, documented under "Releasing" in README.md:
+#   nuget.org  → Trusted Publishing → policy owned by the KobenDigital organisation, for
+#                KOBENDigital / Koben.Umbraco.PendingChanges / release.yml / environment "nuget"
+#   GitHub     → repository secret NUGET_USER = the nuget.org profile name that owns the policy
+# To release: bump <Version> in the csproj and "version" in umbraco-package.json, commit, then
+#   git tag vX.Y.Z && git push origin vX.Y.Z
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  PROJECT: src/Koben.Umbraco.PendingChanges/Koben.Umbraco.PendingChanges.csproj
+  MANIFEST: src/Koben.Umbraco.PendingChanges/wwwroot/umbraco-package.json
+
+jobs:
+  publish:
+    name: Pack and publish to nuget.org
+    runs-on: ubuntu-latest
+    environment: nuget
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # let nuget.org verify this workflow via GitHub OIDC
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # The manifest version is not cosmetic: it is what the backoffice uses to cache-bust the
+      # script, so a release that forgets it ships code editors will not receive. See README.
+      - name: Check the tag matches the package and manifest versions
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$PROJECT")
+          MANIFEST_VERSION=$(python3 -c "import json;print(json.load(open('$MANIFEST'))['version'])")
+          echo "tag=$GITHUB_REF_NAME csproj=$VERSION umbraco-package.json=$MANIFEST_VERSION"
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match <Version>$VERSION</Version> in the csproj"; exit 1
+          fi
+          if [ "$MANIFEST_VERSION" != "$VERSION" ]; then
+            echo "::error::umbraco-package.json version $MANIFEST_VERSION does not match csproj version $VERSION"; exit 1
+          fi
+
+      # Default UmbracoVersion = the supported floor; that is what the nupkg's dependency range starts at.
+      - name: Build and pack
+        run: |
+          dotnet build "$PROJECT" -c Release -p:ContinuousIntegrationBuild=true
+          dotnet pack "$PROJECT" -c Release --no-build -o artifacts \
+            -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
+          ls -l artifacts
+
+      # Request the temporary key right before the push: it is valid for one hour and single-use.
+      - name: NuGet login (OIDC → temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # --skip-duplicate lets a rerun (for example after a failed release step) pass without
+      # re-pushing. A version already on nuget.org is immutable, so if you meant to ship a change,
+      # bump the version and tag again; the warning below is the tell.
+      - name: Push to nuget.org
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          if curl -sf "https://api.nuget.org/v3-flatcontainer/koben.umbraco.pendingchanges/index.json" \
+               | grep -qi "\"$VERSION\""; then
+            echo "::warning::Koben.Umbraco.PendingChanges $VERSION is already on nuget.org; this push is a no-op. Bump the version to publish new content."
+          fi
+          dotnet nuget push "artifacts/*.nupkg" \
+            --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+
+      # Idempotent: a rerun updates the existing release's assets instead of failing.
+      # A tag with a hyphen (v1.2.0-beta.1) is a prerelease and must not become "Latest".
+      - name: Create or update GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          PRERELEASE=()
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE=(--prerelease) ;; esac
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" artifacts/*.nupkg --clobber
+            gh release edit "$GITHUB_REF_NAME" "${PRERELEASE[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/*.nupkg \
+              --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${PRERELEASE[@]}"
+          fi

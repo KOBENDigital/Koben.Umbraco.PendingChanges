@@ -5,6 +5,13 @@ obj/
 *.suo
 artifacts/
 
+# Umbraco test site runtime state
+test/TestSite/umbraco/Data/
+test/TestSite/umbraco/Logs/
+test/TestSite/umbraco/mediacache/
+test/TestSite/umbraco/models/
+test/TestSite/wwwroot/media/
+
 # Schemas Umbraco downloads on first boot
 appsettings-schema.json
 appsettings-schema.*.json
@@ -12,3 +19,6 @@ umbraco-package-schema.json
 
 # OS
 .DS_Store
+
+# Local agent/editor settings
+.claude/
