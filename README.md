@@ -11,10 +11,17 @@ This repository is the package source. For what it does and how to install it, s
 ```
 src/Koben.Umbraco.PendingChanges/
   Services/            comparison and attribution (the whole of the logic)
+    BlockValueReader   reads the blocks out of a stored block editor value
   Controllers/         the backoffice Management API endpoint
   wwwroot/             umbraco-package.json + the backoffice extension (plain JS, no build step)
   PendingChangesComposer.cs
 ```
+
+The one backoffice extension file is registered twice: once for the document workspace, once for a
+block's. Umbraco creates a workspace context extension as `new Api(host, workspaceContext)`, and
+which workspace the second argument belongs to is what the class branches on. Two files would need
+two manifest entries anyway, and a second file imported from the first would not get the manifest's
+cache-busting query (see below).
 
 The client is deliberately a single hand-written ES module with no build step — it is small, it
 imports everything it needs from the backoffice's own import map, and keeping it to one file keeps
@@ -73,7 +80,10 @@ Iterating locally: NuGet caches by id *and* version, so re-packing the same vers
 picked up. `rm -rf ~/.nuget/packages/koben.umbraco.pendingchanges artifacts` between runs.
 
 The admin credentials in `test/TestSite/appsettings.Development.json` are throwaway values for an
-unattended local install. They are not used anywhere else.
+unattended local install. They are not used anywhere else. That file also sets
+`Umbraco:CMS:Global:UseHttps` to `false`, which is what lets the backoffice *log in* over the plain
+http the run command uses: OpenIddict refuses an authorization request over http unless Umbraco
+tells it to, and Umbraco tells it to exactly when `UseHttps` is off.
 
 ## Verification
 
@@ -81,6 +91,15 @@ The comparison, the attribution and both indicators were exercised against a rea
 site (koben.com.au's CMS): property flags, tab dots, twelve published pages checked for false
 positives, and the diff cross-checked against Umbraco's own `document/{id}/published` endpoint. No
 screenshots in the README yet.
+
+Block flagging was exercised against `test/TestSite` on Umbraco 18.1.1: a page with a Block List of
+three blocks, one edited (content and settings), one untouched, one added, and a nested block added
+inside another block. Checked in the backoffice and against the endpoint: only the blocks that
+differ are marked, an added block reads **New** and an edited one **Edited**, a block's own editor
+flags only the properties that differ in both its content and its settings views, and publishing
+the page takes every mark away. The block tab dot — a dot on a tab *inside* a block's editor — uses
+the same code as the document's and has not been exercised on a block whose element type has more
+than one tab.
 
 ## Releasing
 

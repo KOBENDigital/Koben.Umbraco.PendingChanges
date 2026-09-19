@@ -22,4 +22,10 @@ public sealed class PendingPropertyChange
 
     /// <summary>When that save happened.</summary>
     public DateTimeOffset ChangedAt { get; init; }
+
+    /// <summary>
+    /// The blocks inside this property's value that publishing would add, change or take away.
+    /// Empty for a property that holds no blocks.
+    /// </summary>
+    public IReadOnlyCollection<PendingBlockChange> Blocks { get; init; } = Array.Empty<PendingBlockChange>();
 }
