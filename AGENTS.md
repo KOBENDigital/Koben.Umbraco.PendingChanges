@@ -61,6 +61,10 @@ markup. Rules for changing it:
 - A block's properties are matched to a block by asking the rendered property which element it is
   bound to (`ownerContext.getUnique()`), never by where it was found. That is what keeps a block
   nested inside the open one from being credited to its parent.
+- Nothing added to a block's card may sit on the card's own buttons. They appear bottom-right of a
+  one-line card, which is the only corner a tag can go, so the tag takes the inverse of whichever
+  `--umb-block-*-actions-opacity` the card publishes and the overlay never takes a pointer event.
+  What the tag said belongs on the card's `title` while it is hidden.
 
 ## Don't break cache busting
 
