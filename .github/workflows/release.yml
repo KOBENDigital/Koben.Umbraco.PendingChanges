@@ -53,24 +53,34 @@ jobs:
             -p:IncludeSymbols=true -p:SymbolPackageFormat=snupkg
           ls -l artifacts
 
-      # Request the temporary key right before the push: it is valid for one hour and single-use.
-      - name: NuGet login (OIDC → temporary API key)
-        uses: NuGet/login@v1
-        id: login
-        with:
-          user: ${{ secrets.NUGET_USER }}
-
-      # --skip-duplicate lets a rerun (for example after a failed release step) pass without
-      # re-pushing. A version already on nuget.org is immutable, so if you meant to ship a change,
-      # bump the version and tag again; the warning below is the tell.
-      - name: Push to nuget.org
+      # A version on nuget.org is immutable, and the very first version may have been pushed by
+      # hand before Trusted Publishing was set up. Either way, tagging it should still record the
+      # release rather than fail, so the push is skipped when the version is already there.
+      - name: Is this version already on nuget.org?
+        id: published
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
           if curl -sf "https://api.nuget.org/v3-flatcontainer/koben.umbraco.pendingchanges/index.json" \
                | grep -qi "\"$VERSION\""; then
-            echo "::warning::Koben.Umbraco.PendingChanges $VERSION is already on nuget.org; this push is a no-op. Bump the version to publish new content."
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Koben.Umbraco.PendingChanges $VERSION is already on nuget.org; skipping the push and just recording the release. Bump the version to publish new content."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
           fi
+
+      # Request the temporary key right before the push: it is valid for one hour and single-use.
+      - name: NuGet login (OIDC → temporary API key)
+        if: steps.published.outputs.already == 'false'
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
+      # --skip-duplicate keeps a rerun (for example after a failed release step) green.
+      - name: Push to nuget.org
+        if: steps.published.outputs.already == 'false'
+        run: |
           dotnet nuget push "artifacts/*.nupkg" \
             --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
             --source https://api.nuget.org/v3/index.json \
