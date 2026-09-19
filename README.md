@@ -77,7 +77,17 @@ CI does the same and then checks, without logging in, that the static web assets
 and protected, versus not registered at all).
 
 Iterating locally: NuGet caches by id *and* version, so re-packing the same version will not be
-picked up. `rm -rf ~/.nuget/packages/koben.umbraco.pendingchanges artifacts` between runs.
+picked up. `rm -rf ~/.nuget/packages/koben.umbraco.pendingchanges artifacts` between runs. Stop the
+site before re-running it — it holds the SQLite file open, so a second run fails on a locked
+database rather than on the port.
+
+The connection string leaves out the `Cache=Shared` that Umbraco's own template carries. With a
+shared cache, SQLite locks whole tables across the connections in a process, and a read that meets
+a write fails outright with `SQLite Error 6: 'database table is locked'` instead of waiting. In
+practice that lands on OpenIddict's token store — every backoffice request validates a token — so a
+busy moment in the editor shows up as a 400 from the token endpoint and a backoffice that looks
+broken. Without it, each connection has its own cache, and WAL plus the busy timeout lets readers
+and the writer through.
 
 The admin credentials in `test/TestSite/appsettings.Development.json` are throwaway values for an
 unattended local install. They are not used anywhere else. That file also sets
