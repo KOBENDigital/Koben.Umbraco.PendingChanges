@@ -2,7 +2,7 @@
   "$schema": "../../umbraco-package-schema.json",
   "name": "Koben.PendingChanges",
   "id": "Koben.PendingChanges",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "allowTelemetry": false,
   "extensions": [
     {
@@ -28,6 +28,21 @@
           "match": "Umb.Workspace.Block"
         }
       ]
+    },
+    {
+      "type": "entitySign",
+      "kind": "icon",
+      "alias": "Koben.PendingChanges.EntitySign.Document",
+      "name": "Pending Changes Document Entity Sign",
+      "element": "/App_Plugins/Koben.PendingChanges/pending-changes.js",
+      "forEntityTypes": ["document"],
+      "forEntityFlags": ["Umb.PendingChanges"],
+      "overwrites": "Umb.EntitySign.Document.HasPendingChanges",
+      "weight": 1100,
+      "meta": {
+        "iconName": "icon-edit",
+        "label": "#content_unpublishedChanges"
+      }
     }
   ]
 }
