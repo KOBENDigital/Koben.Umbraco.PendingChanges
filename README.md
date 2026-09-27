@@ -17,11 +17,12 @@ src/Koben.Umbraco.PendingChanges/
   PendingChangesComposer.cs
 ```
 
-The one backoffice extension file is registered twice: once for the document workspace, once for a
-block's. Umbraco creates a workspace context extension as `new Api(host, workspaceContext)`, and
-which workspace the second argument belongs to is what the class branches on. Two files would need
-two manifest entries anyway, and a second file imported from the first would not get the manifest's
-cache-busting query (see below).
+The one backoffice extension file is registered three times: once for the document workspace, once
+for a block's, and once as the entity sign that highlights a page in the content tree (its `element`
+export, where the workspaces use its `api` export). Umbraco creates a workspace context extension as
+`new Api(host, workspaceContext)`, and which workspace the second argument belongs to is what the
+class branches on. Separate files would need their own manifest entries anyway, and a second file
+imported from the first would not get the manifest's cache-busting query (see below).
 
 The client is deliberately a single hand-written ES module with no build step — it is small, it
 imports everything it needs from the backoffice's own import map, and keeping it to one file keeps
@@ -110,6 +111,17 @@ flags only the properties that differ in both its content and its settings views
 the page takes every mark away. The block tab dot — a dot on a tab *inside* a block's editor — uses
 the same code as the document's and has not been exercised on a block whose element type has more
 than one tab.
+
+Validation highlighting and the content tree highlight were exercised against `test/TestSite` on
+Umbraco 18.0.2, the floor. With a mandatory title, a mandatory field on a second tab and a mandatory
+heading on the block element type: a plain Save and a Save and publish both band every invalid
+field red, with the label red, over the pending highlight where a field is both; the band clears as
+the value is typed, with no shift; a tab holding both the pending dot and Umbraco's "!" shows both
+side by side; invalid block cards are outlined red and the field inside an opened block is banded.
+The same page, published and then made invalid by tightening the block's validation, still bands
+the block property and outlines its cards with nothing pending — the path where the walk goes into a
+property only because it is invalid. The tree row is highlighted while the page has unpublished
+changes and clears the moment it is published.
 
 ## Releasing
 

@@ -12,6 +12,37 @@ Every tab holding one of those properties gets an amber dot, so a change on a ta
 looking at is still visible. A page whose saved content matches what is live looks exactly as it
 always did.
 
+## The content tree
+
+Umbraco marks a page with unpublished changes with a small grey pencil on its icon in the content
+tree. With this package installed that pencil is amber and the page's icon sits on an amber tile,
+so the pages waiting to be published stand out in a long tree at a glance.
+
+This follows Umbraco's own "has unpublished changes" flag — the one behind the grey pencil — rather
+than the field-by-field comparison below, so the tree costs no extra requests and updates whenever
+Umbraco's does. The two are worked out separately, so the tree and the editor can in principle
+disagree about an edge case; where they do, the editor's field flags are the precise answer.
+
+## Validation
+
+Umbraco marks a field that fails validation with a small "!" by its label and a message under the
+editor. That is easy to miss on a long page, so the whole field gets a red band as well, the same
+shape as the pending highlight, with its label in red. A field that is both unpublished and invalid
+shows red: the red is the one the editor has to act on.
+
+Blocks are covered too. An invalid block's card gets a red outline, and the property holding it gets
+the red band — at every depth, so a missing value three blocks down is traceable from the page. Open
+the block and the invalid field inside it is banded the same way. The band clears as soon as the
+value is valid and nothing moves while you type.
+
+Umbraco draws validation in yellow after a plain **Save** (the draft is kept, it just cannot be
+published) and in red after **Save and publish**. The band is red after either: every value a save
+has just kept is also unpublished, so a yellow band would look exactly like the pending one.
+
+Umbraco's "!" badges — by a field's label, on a tab, on a block card and its buttons — are shrunk
+from 24px to 16px, and the pending dot on a tab is 10px, so the markers stop crowding the labels
+they belong to.
+
 ## Blocks
 
 A block editor is one property, so "this property is not published" is rarely enough: the page has
@@ -139,7 +170,16 @@ the rendered property elements by a document workspace context. They are re-appl
 workspace re-renders and removed when it closes. If an Umbraco release changes the content editor's
 markup the flags stop appearing — nothing else in the backoffice is affected. The tab dot is
 Umbraco's own `umb-badge` in the tab's `extra` slot, the same element and position Umbraco uses for
-a tab's validation badge; if a tab carries both at once they overlap.
+a tab's validation badge; when a tab carries both, the dot moves aside so the "!" stays readable.
+
+The validation band needs no watching of its own. Umbraco already keeps an `invalid` attribute on
+each property's layout current, and a stylesheet added to the layout is keyed on it. Block cards
+are handled the same way through the `content-invalid` / `settings-invalid` attributes Umbraco puts
+on them.
+
+The tree highlight is an Umbraco entity sign, the same extension point as the grey pencil it
+replaces. The sign highlights the tree row it is drawn in, and takes the highlight off again when
+Umbraco stops drawing it.
 
 A block's own editor is a workspace of its own — in an overlay, or expanded inline — so a second
 workspace context does the same job there, and takes the document's answer from the first rather

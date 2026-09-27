@@ -5,7 +5,7 @@ import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import { UmbArrayState } from "@umbraco-cms/backoffice/observable-api";
 import { umbHttpClient } from "@umbraco-cms/backoffice/http-client";
 import { encodeFolderName } from "@umbraco-cms/backoffice/router";
-import { html, css, nothing } from "@umbraco-cms/backoffice/external/lit";
+import { html, css, nothing, unsafeCSS } from "@umbraco-cms/backoffice/external/lit";
 
 const API_BASE = "/umbraco/management/api/v1/pending-changes";
 const API_SECURITY = [{ type: "http", scheme: "bearer" }];
@@ -29,8 +29,13 @@ const TAB_ELEMENT = "uui-tab";
 const TAB_MARK_PREFIX = "content-tab:tab/";
 const FLAG_ELEMENT = "koben-pending-change-flag";
 const BLOCK_MARK_ELEMENT = "koben-pending-block-mark";
+const TREE_SIGN_ELEMENT = "koben-pending-tree-sign";
 const TAB_BADGE_ELEMENT = "umb-badge";
+const TREE_ITEM_ELEMENT = "umb-document-tree-item";
 const MARKER_ATTRIBUTE = "data-koben-pending-change";
+const HIGHLIGHT_ATTRIBUTE = "data-koben-pending-highlight";
+const TREE_MARKER_ATTRIBUTE = "data-koben-pending-tree";
+const INVALID_ATTRIBUTE = "invalid";
 const BLOCK_MARKER_ATTRIBUTE = "data-koben-pending-block";
 const TAB_MARKER_ATTRIBUTE = "data-koben-pending-tab";
 const PENDING_STATE = "PendingChanges";
@@ -40,13 +45,148 @@ const SETTINGS_SCOPE = "Settings";
 const REFRESH_DELAY = 150;
 const SCAN_DELAY = 100;
 
-const ACCENT = "inset 3px 0 0 0 var(--uui-color-warning-emphasis, #af7c12)";
-const TINT = "color-mix(in srgb, var(--uui-color-warning, #ffd621) 10%, transparent)";
+/** Where the pending dot moves to when Umbraco's own badge — a validation "!" — holds the corner. */
+const CROWDED_TAB_INSET = "0 20px auto auto";
+
+/** The block card's own buttons, each of which carries its own "!" when the block is invalid. */
+const BLOCK_ACTION_LIST_ELEMENT = "umb-block-action-list";
+const BLOCK_ACTION_ELEMENT = "umb-block-action";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const WEEK = 7 * DAY;
+
+/**
+ * Adopted into every property layout the workspace draws. The layout keeps its own `invalid`
+ * attribute up to date as validation runs, so a stylesheet keyed on it follows validation with
+ * nothing to observe. A property that fails validation is the one an editor has to act on, so its
+ * red wins over the amber of a pending change when a property is both.
+ *
+ * It is always red. Umbraco repaints `--uui-color-invalid` in its warning yellow after a plain save —
+ * the draft is kept, it just cannot be published — and every value a save has just kept is also a
+ * pending change, so a highlight following that token would look exactly like the pending one.
+ *
+ * The invalid band is drawn with shadows that reach out into the gutter rather than with padding,
+ * so a value that flips between valid and invalid as it is typed does not move under the cursor.
+ * The tint is mixed into the surface rather than made transparent because the shadows overlap.
+ */
+const LAYOUT_STYLES = css`
+  :host([${unsafeCSS(HIGHLIGHT_ATTRIBUTE)}]) {
+    box-shadow: inset 3px 0 0 0 var(--uui-color-warning-emphasis, #af7c12);
+    background-color: color-mix(in srgb, var(--uui-color-warning, #ffd621) 10%, transparent);
+    padding-left: var(--uui-size-space-4);
+  }
+
+  :host([${unsafeCSS(INVALID_ATTRIBUTE)}]) {
+    --koben-invalid-tint: color-mix(in srgb, var(--uui-color-danger, #df2a5d) 8%, var(--uui-color-surface, #fff));
+    background-color: var(--koben-invalid-tint);
+    box-shadow:
+      calc(var(--uui-size-space-4) * -1) 0 0 0 var(--koben-invalid-tint),
+      var(--uui-size-space-4) 0 0 0 var(--koben-invalid-tint),
+      calc(var(--uui-size-space-4) * -1 - 4px) 0 0 0 var(--uui-color-danger, #df2a5d);
+  }
+
+  :host([${unsafeCSS(INVALID_ATTRIBUTE)}]) #label {
+    color: var(--uui-color-danger-standalone, #ae1e47);
+  }
+
+  #invalid-badge uui-badge {
+    min-width: 16px;
+    min-height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+`;
+
+/**
+ * Umbraco's "!" badges are 24px, which is loud next to a 14px label and bigger than the tab text
+ * they sit on. Adopted into whatever shadow root draws one — a tab's badge, a block card, a card's
+ * buttons — and styling the badge from outside, which wins over the badge's own `:host` sizes.
+ */
+const BADGE_STYLES = css`
+  uui-badge {
+    min-width: 16px;
+    min-height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+`;
+
+/** The pending dot on a tab: it has no text, so it is a dot rather than a badge. */
+const DOT_STYLES = css`
+  uui-badge {
+    min-width: 10px;
+    min-height: 10px;
+    padding: 0;
+  }
+`;
+
+/**
+ * Adopted into every block card the workspace finds. Umbraco already reflects a block's validation
+ * onto its card, but only as a hairline and a small badge; this makes an invalid block as easy to
+ * spot in a long list as an invalid field is, in the same red. It is an outline so it sits outside
+ * the pending mark rather than under it.
+ */
+const ENTRY_STYLES = css`
+  :host([content-invalid]),
+  :host([settings-invalid]),
+  :host([location-invalid]) {
+    outline: 2px solid var(--uui-color-danger, #df2a5d);
+    outline-offset: 1px;
+    border-radius: var(--uui-border-radius, 3px);
+  }
+
+  uui-badge {
+    min-width: 16px;
+    min-height: 16px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+`;
+
+/**
+ * Adopted into a document tree item while it carries the pending changes sign: an amber tile behind
+ * the page's icon. The tile is a background plus a spread shadow of the same colour, so it grows
+ * around the icon without moving the icon or the name.
+ */
+const TREE_ROW_STYLES = css`
+  :host([${unsafeCSS(TREE_MARKER_ATTRIBUTE)}]) #icon-container {
+    --koben-tree-tile: color-mix(in srgb, var(--uui-color-warning, #fad634) 70%, transparent);
+    border-radius: var(--uui-border-radius, 3px);
+    background-color: var(--koben-tree-tile);
+    box-shadow: 0 0 0 3px var(--koben-tree-tile);
+  }
+`;
+
+/**
+ * Adds a stylesheet to a shadow root once. Lit builds the sheet only where the browser can adopt
+ * one; anywhere else this does nothing, which leaves the element as Umbraco drew it.
+ * @param {ShadowRoot | null | undefined} root The shadow root to style.
+ * @param {import("@umbraco-cms/backoffice/external/lit").CSSResult} styles The styles to adopt.
+ */
+function adoptStyles(root, styles) {
+  const sheet = styles.styleSheet;
+  if (!root || !sheet || root.adoptedStyleSheets.includes(sheet)) {
+    return;
+  }
+
+  root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+}
+
+/**
+ * Takes a stylesheet back out of a shadow root.
+ * @param {ShadowRoot | null | undefined} root The shadow root it was adopted into.
+ * @param {import("@umbraco-cms/backoffice/external/lit").CSSResult} styles The styles to remove.
+ */
+function dropStyles(root, styles) {
+  const sheet = styles.styleSheet;
+  if (!root || !sheet || !root.adoptedStyleSheets.includes(sheet)) {
+    return;
+  }
+
+  root.adoptedStyleSheets = root.adoptedStyleSheets.filter((adopted) => adopted !== sheet);
+}
 
 /**
  * Shares one document's unpublished blocks with the block workspaces opened from it. A block's
@@ -219,6 +359,98 @@ if (!customElements.get(BLOCK_MARK_ELEMENT)) {
   customElements.define(BLOCK_MARK_ELEMENT, KobenPendingBlockMarkElement);
 }
 
+/** How many of this package's signs each tree item is currently showing — its preview and its popover. */
+const treeRowHolds = new WeakMap();
+
+/**
+ * The document tree item a sign was rendered for. A sign is drawn inside Umbraco's sign bundle,
+ * and the bundle inside the tree item, so it is two shadow roots up. Anywhere else a sign is shown —
+ * a picker, a collection — this finds nothing and the sign is only a sign.
+ * @param {Element} sign The sign element.
+ * @returns {Element | null} The tree item, or null when the sign is not in the document tree.
+ */
+function treeItemOf(sign) {
+  const bundle = sign.getRootNode()?.host;
+  const item = bundle?.getRootNode()?.host;
+  return item?.localName === TREE_ITEM_ELEMENT ? item : null;
+}
+
+/**
+ * The sign Umbraco draws on a document with unpublished changes, drawn in amber rather than grey,
+ * with an amber tile behind the page's icon so the page stands out in a long tree.
+ *
+ * Umbraco decides when a document has unpublished changes and only renders a sign when it does, so
+ * the highlight is exactly as current as the tree: it goes on when the sign is connected and comes
+ * off when the sign is. That is Umbraco's own flag, not this package's comparison — the tree would
+ * otherwise need a request per row.
+ */
+export class KobenPendingTreeSignElement extends UmbLitElement {
+  #item = null;
+
+  static styles = css`
+    umb-icon {
+      color: var(--uui-color-warning-standalone, #a17700);
+      filter: drop-shadow(-1px 0 0 var(--umb-sign-bundle-bg)) drop-shadow(0 -1px 0 var(--umb-sign-bundle-bg))
+        drop-shadow(0 1px 0 var(--umb-sign-bundle-bg));
+    }
+
+    umb-icon::before {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      border-radius: 50%;
+      inset: 2px;
+      background-color: var(--umb-sign-bundle-bg);
+    }
+  `;
+
+  connectedCallback() {
+    super.connectedCallback();
+
+    this.#item = treeItemOf(this);
+    const root = this.#item?.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const holds = treeRowHolds.get(this.#item) ?? 0;
+    treeRowHolds.set(this.#item, holds + 1);
+
+    if (holds === 0) {
+      adoptStyles(root, TREE_ROW_STYLES);
+      this.#item.setAttribute(TREE_MARKER_ATTRIBUTE, "");
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+
+    const item = this.#item;
+    this.#item = null;
+    if (!item || !treeRowHolds.has(item)) {
+      return;
+    }
+
+    const holds = treeRowHolds.get(item) - 1;
+    if (holds > 0) {
+      treeRowHolds.set(item, holds);
+      return;
+    }
+
+    treeRowHolds.delete(item);
+    item.removeAttribute(TREE_MARKER_ATTRIBUTE);
+    dropStyles(item.shadowRoot, TREE_ROW_STYLES);
+  }
+
+  render() {
+    return html`<umb-icon name="icon-edit"></umb-icon>`;
+  }
+}
+
+if (!customElements.get(TREE_SIGN_ELEMENT)) {
+  customElements.define(TREE_SIGN_ELEMENT, KobenPendingTreeSignElement);
+}
+
 /**
  * Asks the server which of a document's saved values are still waiting to be published.
  * @param {string} documentId The document's key.
@@ -260,6 +492,10 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
   #decorated = new Set();
   #decoratedEntries = new Set();
   #decoratedTabs = new Set();
+  #layouts = new WeakMap();
+  #styledLayouts = new Set();
+  #styledEntries = new Set();
+  #styledBadgeRoots = new Set();
   #observedRoots = new WeakSet();
   #mutationObserver;
   #refreshTimer;
@@ -399,6 +635,8 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
       this.#collect(document.body, found, false);
     }
 
+    this.#styleLayouts(found.properties);
+    this.#styleEntries(found.entries);
     this.#markProperties(found.properties);
     this.#markEntries(found.entries);
     this.#markTabs(found.tabs);
@@ -429,8 +667,8 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
         }
 
         // The document's blocks are drawn inside its properties, so the walk only goes in when
-        // there are blocks to look for.
-        if (this.#tracksBlocks()) {
+        // there are blocks to look for: unpublished ones anywhere, or invalid ones in this property.
+        if (this.#tracksBlocks() || this.#isInvalid(element)) {
           this.#collect(element, found, true);
         }
 
@@ -460,6 +698,114 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
   /** Whether this workspace has any unpublished blocks to look for. */
   #tracksBlocks() {
     return this.#blocksByKey.size > 0;
+  }
+
+  /**
+   * Whether a property is failing validation, as far as its layout has said so yet. A property holding
+   * blocks is invalid when any block inside it is.
+   * @param {Element} property The rendered property element.
+   * @returns {boolean} Whether the property's layout is marked invalid.
+   */
+  #isInvalid(property) {
+    return this.#layouts.get(property)?.hasAttribute(INVALID_ATTRIBUTE) === true;
+  }
+
+  /**
+   * Gives every rendered property's layout the stylesheet that draws both highlights, and watches
+   * the layout's `invalid` attribute so a block editor that turns invalid gets walked into.
+   * @param {Array<Element>} properties The property elements currently rendered.
+   */
+  #styleLayouts(properties) {
+    for (const stale of [...this.#styledLayouts]) {
+      if (!stale.isConnected) {
+        this.#styledLayouts.delete(stale);
+      }
+    }
+
+    for (const property of properties) {
+      this.#styleLayout(property);
+    }
+  }
+
+  /**
+   * Styles one property's layout, once it has rendered.
+   * @param {Element} property The rendered property element.
+   */
+  async #styleLayout(property) {
+    const known = this.#layouts.get(property);
+    const layout = await this.#layoutOf(property);
+    if (!layout || this.#isDestroyed) {
+      return;
+    }
+
+    adoptStyles(layout.shadowRoot, LAYOUT_STYLES);
+    this.#styledLayouts.add(layout);
+
+    if (layout !== known) {
+      this.#mutationObserver.observe(layout, { attributes: true, attributeFilter: [INVALID_ATTRIBUTE] });
+
+      // A property that was already invalid when it rendered — a tab opened after a failed save —
+      // never changes the attribute, so it is walked into now rather than on its next change.
+      if (layout.hasAttribute(INVALID_ATTRIBUTE)) {
+        this.#scheduleScan();
+      }
+    }
+  }
+
+  /**
+   * The layout a property draws its label and editor in, resolved once and remembered.
+   * @param {Element} property The rendered property element.
+   * @returns {Promise<Element | null>} The layout, or null when the property never rendered one.
+   */
+  async #layoutOf(property) {
+    const known = this.#layouts.get(property);
+    if (known?.isConnected) {
+      return known;
+    }
+
+    const layout = await this.#resolveLayout(property);
+    if (layout) {
+      this.#layouts.set(property, layout);
+    }
+
+    return layout;
+  }
+
+  /**
+   * Gives every rendered block card the stylesheet that makes an invalid block stand out.
+   * @param {Array<Element>} entries The block cards currently rendered.
+   */
+  #styleEntries(entries) {
+    for (const stale of [...this.#styledEntries]) {
+      if (!stale.isConnected) {
+        this.#styledEntries.delete(stale);
+      }
+    }
+
+    for (const entry of entries) {
+      adoptStyles(entry.shadowRoot, ENTRY_STYLES);
+      this.#styledEntries.add(entry);
+
+      const actionList = entry.shadowRoot?.querySelector(BLOCK_ACTION_LIST_ELEMENT);
+      for (const action of actionList?.shadowRoot?.querySelectorAll(BLOCK_ACTION_ELEMENT) ?? []) {
+        this.#styleBadgeRoot(action.shadowRoot, BADGE_STYLES);
+      }
+    }
+  }
+
+  /**
+   * Shrinks the badges drawn in one shadow root, and remembers the root so `destroy()` can put
+   * them back.
+   * @param {ShadowRoot | null | undefined} root The shadow root holding the badge.
+   * @param {import("@umbraco-cms/backoffice/external/lit").CSSResult} styles The size to give it.
+   */
+  #styleBadgeRoot(root, styles) {
+    if (!root) {
+      return;
+    }
+
+    adoptStyles(root, styles);
+    this.#styledBadgeRoots.add(root);
   }
 
   /**
@@ -663,6 +1009,12 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
     }
 
     for (const tab of tabs) {
+      for (const badge of tab.children) {
+        if (badge.localName === TAB_BADGE_ELEMENT && badge !== tab.__kobenDot) {
+          this.#styleBadgeRoot(badge.shadowRoot, BADGE_STYLES);
+        }
+      }
+
       const slug = (tab.getAttribute("data-mark") ?? "").slice(TAB_MARK_PREFIX.length);
       const count = counts.get(slug) ?? 0;
 
@@ -702,11 +1054,18 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
    */
   #markTab(tab, count) {
     const label = plural(count, "unpublished change");
-    if (tab.getAttribute(TAB_MARKER_ATTRIBUTE) === label && tab.__kobenDot?.isConnected) {
+
+    // Umbraco puts its own badge — the "!" of a tab with invalid values — in the same corner, and
+    // only while the tab is not the one open. The dot steps aside rather than cover it.
+    const crowded = [...tab.children].some(
+      (child) => child.localName === TAB_BADGE_ELEMENT && child !== tab.__kobenDot
+    );
+    const signature = `${label}|${crowded}`;
+    if (tab.getAttribute(TAB_MARKER_ATTRIBUTE) === signature && tab.__kobenDot?.isConnected) {
       return;
     }
 
-    tab.setAttribute(TAB_MARKER_ATTRIBUTE, label);
+    tab.setAttribute(TAB_MARKER_ATTRIBUTE, signature);
 
     let dot = tab.__kobenDot;
     if (!dot?.isConnected) {
@@ -716,7 +1075,16 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
       tab.appendChild(dot);
     }
 
+    // The badge renders its shadow root on connect, so it can be sized straight away.
+    adoptStyles(dot.shadowRoot, DOT_STYLES);
+
     dot.setAttribute("title", label);
+    if (crowded) {
+      dot.style.setProperty("--uui-badge-inset", CROWDED_TAB_INSET);
+    } else {
+      dot.style.removeProperty("--uui-badge-inset");
+    }
+
     tab.__kobenDot = dot;
     this.#decoratedTabs.add(tab);
   }
@@ -743,7 +1111,10 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
   async #decorate(property, change) {
     const detail = summariseBlockCounts(change.blocks ?? []);
     const signature = `${change.culture ?? ""}|${change.segment ?? ""}|${change.changedBy}|${change.changedAt}|${detail}`;
-    const isIntact = property.__kobenFlag?.isConnected && property.__kobenLayout?.isConnected;
+    const isIntact =
+      property.__kobenFlag?.isConnected &&
+      property.__kobenLayout?.isConnected &&
+      property.__kobenLayout.hasAttribute(HIGHLIGHT_ATTRIBUTE);
     if (property.getAttribute(MARKER_ATTRIBUTE) === signature && isIntact) {
       return;
     }
@@ -751,16 +1122,17 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
     property.setAttribute(MARKER_ATTRIBUTE, signature);
     this.#decorated.add(property);
 
-    const layout = await this.#resolveLayout(property);
-    if (!layout || this.#isDestroyed || !property.isConnected) {
+    const layout = await this.#layoutOf(property);
+    if (!layout || this.#isDestroyed || !property.isConnected || !property.hasAttribute(MARKER_ATTRIBUTE)) {
       return;
     }
 
     // The property element itself is laid out inline, so the highlight goes on the layout inside it,
-    // which is the grid holding both the label and the editor.
-    layout.style.setProperty("box-shadow", ACCENT);
-    layout.style.setProperty("background-color", TINT);
-    layout.style.setProperty("padding-left", "var(--uui-size-space-4)");
+    // which is the grid holding both the label and the editor. The stylesheet draws it; the attribute
+    // switches it on.
+    adoptStyles(layout.shadowRoot, LAYOUT_STYLES);
+    this.#styledLayouts.add(layout);
+    layout.setAttribute(HIGHLIGHT_ATTRIBUTE, "");
 
     let flag = layout.querySelector(FLAG_ELEMENT);
     if (!flag) {
@@ -817,9 +1189,7 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
     }
 
     property.removeAttribute(MARKER_ATTRIBUTE);
-    property.__kobenLayout?.style.removeProperty("box-shadow");
-    property.__kobenLayout?.style.removeProperty("background-color");
-    property.__kobenLayout?.style.removeProperty("padding-left");
+    property.__kobenLayout?.removeAttribute(HIGHLIGHT_ATTRIBUTE);
     property.__kobenLayout = undefined;
     property.__kobenFlag?.remove();
     property.__kobenFlag = undefined;
@@ -843,6 +1213,22 @@ export class KobenPendingChangesWorkspaceContext extends UmbControllerBase {
     for (const tab of [...this.#decoratedTabs]) {
       this.#clearTab(tab);
     }
+
+    for (const layout of this.#styledLayouts) {
+      layout.removeAttribute(HIGHLIGHT_ATTRIBUTE);
+      dropStyles(layout.shadowRoot, LAYOUT_STYLES);
+    }
+    this.#styledLayouts.clear();
+
+    for (const entry of this.#styledEntries) {
+      dropStyles(entry.shadowRoot, ENTRY_STYLES);
+    }
+    this.#styledEntries.clear();
+
+    for (const root of this.#styledBadgeRoots) {
+      dropStyles(root, BADGE_STYLES);
+    }
+    this.#styledBadgeRoots.clear();
 
     super.destroy();
   }
@@ -893,5 +1279,5 @@ function summariseBlockCounts(blocks) {
   return parts.join(", ");
 }
 
-export { KobenPendingChangesWorkspaceContext as api };
+export { KobenPendingChangesWorkspaceContext as api, KobenPendingTreeSignElement as element };
 export default KobenPendingChangesWorkspaceContext;

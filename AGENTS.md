@@ -7,7 +7,8 @@ Rules for agents working in this repository. Modelled on `Koben.Umbraco.Structur
 An Umbraco **18+** package that flags a document's saved-but-unpublished property values in the
 content editor, names the editor behind each one, dots the tabs holding them, and marks the blocks
 inside those values — the cards in a block editor, and the block's own properties once it is open.
-NuGet id `Koben.Umbraco.PendingChanges`, MIT.
+It also highlights pages with unpublished changes in the content tree, and makes fields and blocks
+that fail validation stand out in red. NuGet id `Koben.Umbraco.PendingChanges`, MIT.
 
 ## The two halves
 
@@ -40,20 +41,33 @@ markup. Rules for changing it:
 
 - A document property is only the document's own when nothing above it in the walk was a property.
   The walk now carries on through a property to reach the block cards inside it — but only when
-  there are unpublished blocks to find, and it collects nothing else on the way.
+  there are unpublished blocks to find, or that property is itself invalid, and it collects nothing
+  else on the way.
 - Inside a property, only roots belonging to block elements are watched for re-renders. A property
   editor re-renders on every keystroke and none of that can change what is waiting to be published.
 - Everything added carries `data-koben-pending-change` / `data-koben-pending-block` /
-  `data-koben-pending-tab` and is removed in `destroy()`. Nothing is left behind when the workspace
-  closes — and a block's overlay goes with it, even though it lives inside another component's
-  shadow root.
+  `data-koben-pending-tab` / `data-koben-pending-highlight` and is removed in `destroy()`. Nothing is
+  left behind when the workspace closes — and a block's overlay goes with it, even though it lives
+  inside another component's shadow root. The same goes for the stylesheets adopted into property
+  layouts and block cards.
+- Highlights that must follow Umbraco's own state are a stylesheet adopted into the element's
+  shadow root and keyed on an attribute Umbraco already maintains (`invalid` on
+  `umb-property-layout`, `content-invalid` / `settings-invalid` / `location-invalid` on block cards),
+  not a copy of that state. The pending highlight is the same stylesheet keyed on
+  `data-koben-pending-highlight`, which is what lets red win over amber by cascade order.
+- Validation is always drawn in `--uui-color-danger`, never `--uui-color-invalid`. Umbraco repaints
+  the invalid token yellow after a plain save, and every value a save has just kept is pending too,
+  so following the token makes invalid indistinguishable from pending.
 - The element names it depends on (`umb-content-workspace-property`, `umb-property-type-based-property`,
-  `umb-property`, `umb-property-layout`, `uui-tab[data-mark^="content-tab:tab/"]`,
-  `umb-block-workspace-view-edit-property`, and the `umb-block-*-entry` / `umb-rte-block` cards) are
-  Umbraco internals. When an Umbraco upgrade changes them, the flags stop appearing; that is the
+  `umb-property`, `umb-property-layout` and its `invalid` attribute and `#label`,
+  `uui-tab[data-mark^="content-tab:tab/"]`, `umb-block-workspace-view-edit-property`, the
+  `umb-block-*-entry` / `umb-rte-block` cards and their `*-invalid` attributes, and — for the tree —
+  `umb-entity-sign-bundle` inside `umb-document-tree-item` and its `#icon-container`; for badge sizes,
+`umb-badge` on a tab and `umb-block-action-list` / `umb-block-action` inside a card) are Umbraco internals. When an Umbraco upgrade changes them, the flags stop appearing; that is the
   failure mode to design for, and it must stay a silent no-op rather than an error.
-- The same file is registered twice in the manifest: once against `Umb.Workspace.Document`, once
-  against `Umb.Workspace.Block`. Umbraco creates a workspace context extension as
+- The same file is registered three times in the manifest: once against `Umb.Workspace.Document`,
+  once against `Umb.Workspace.Block`, and once as an `entitySign` (its `element` export) for the
+  `Umb.PendingChanges` flag, overwriting Umbraco's grey `Umb.EntitySign.Document.HasPendingChanges`. Umbraco creates a workspace context extension as
   `new Api(host, workspaceContext)` — the workspace is the **second** argument, and mixing that up
   silently gives you two document-mode instances rather than one of each. The document instance
   fetches and provides `Koben.PendingChanges`; the block instance consumes it, which works from
@@ -65,6 +79,18 @@ markup. Rules for changing it:
   one-line card, which is the only corner a tag can go, so the tag takes the inverse of whichever
   `--umb-block-*-actions-opacity` the card publishes and the overlay never takes a pointer event.
   What the tag said belongs on the card's `title` while it is hidden.
+
+## The tree highlight rides on an entity sign
+
+Umbraco only renders a sign on a tree item carrying the flag it is registered for, so the sign's
+connect and disconnect are exactly "this page has unpublished changes" turning on and off. The sign
+walks up two shadow roots (sign bundle, then tree item), and only when that ends at
+`umb-document-tree-item` does it adopt a stylesheet into the tree item and set
+`data-koben-pending-tree`; anywhere else a sign is drawn it is only an amber icon. A tree item can
+hold two copies of the sign (the preview and the hover popover), so the highlight is reference
+counted. The sign's `weight` keeps it in the two-sign preview, which is the copy that is always
+rendered. Do not replace the document tree item element to do this: if its alias or module changed,
+the tree would break rather than lose a highlight.
 
 ## Don't break cache busting
 
